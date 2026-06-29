@@ -2,9 +2,11 @@ import os
 import json
 import sys
 from flask import Flask, request, Response, send_from_directory
+from flask_cors import CORS
 from agents import extractor, analyst, writer
 
 app = Flask(__name__, static_folder="static")
+CORS(app, origins=["https://pir-generator.vercel.app"])
 
 # ── Static frontend ──────────────────────────────────────────────────────────
 
@@ -65,5 +67,6 @@ if __name__ == "__main__":
     if not api_key:
         print("ERROR: ANTHROPIC_API_KEY environment variable not set.", file=sys.stderr)
         sys.exit(1)
-    print("PIR Generator running at http://localhost:5001")
-    app.run(port=5001, debug=False)
+    port = int(os.environ.get("PORT", 5001))
+    print(f"PIR Generator running at http://localhost:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
