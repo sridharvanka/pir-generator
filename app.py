@@ -6,7 +6,7 @@ from flask_cors import CORS
 from agents import extractor, analyst, writer
 
 app = Flask(__name__, static_folder="static")
-CORS(app, origins=["https://pir-generator.vercel.app"])
+CORS(app)  # allow all origins — fine for portfolio demo
 
 # ── Static frontend ──────────────────────────────────────────────────────────
 
