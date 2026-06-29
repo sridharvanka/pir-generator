@@ -3,7 +3,7 @@ import json
 import sys
 from flask import Flask, request, Response, send_from_directory
 from flask_cors import CORS
-from agents import extractor, analyst, writer
+from agents import extractor, analyst, writer, verifier
 
 app = Flask(__name__, static_folder="static")
 CORS(app)  # allow all origins — fine for portfolio demo
@@ -52,6 +52,14 @@ def generate():
             yield event("step", {"step": "writer", "status": "done",
                                   "label": "PIR ready",
                                   "data": {"markdown": pir_markdown}})
+
+            # ── Step 4: Verifier ───────────────────────────────────────────
+            yield event("step", {"step": "verifier", "status": "running",
+                                  "label": "Checking for hallucinations and factual errors..."})
+            verification = verifier.run(slack_thread, pir_markdown)
+            yield event("step", {"step": "verifier", "status": "done",
+                                  "label": "Verification complete",
+                                  "data": verification})
 
             yield event("done", {"message": "Pipeline complete"})
 

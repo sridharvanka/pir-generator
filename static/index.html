@@ -303,6 +303,72 @@
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Verification panel */
+  .verification-content { display: none; }
+  .verification-content.visible { display: block; }
+
+  .verify-summary {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+  .verify-summary h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .verify-summary p { font-size: 13px; color: #c9d1d9; line-height: 1.6; }
+
+  .confidence-badge {
+    display: inline-block;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 10px; border-radius: 12px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+  .confidence-high { background: rgba(63,185,80,0.15); color: var(--green); }
+  .confidence-medium { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .confidence-low { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  .findings-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+
+  .finding {
+    border-radius: 8px;
+    border-left: 3px solid var(--border);
+    padding: 12px 16px;
+    background: var(--surface2);
+  }
+  .finding.critical { border-left-color: var(--red); }
+  .finding.warning  { border-left-color: var(--yellow); }
+  .finding.note     { border-left-color: var(--accent); }
+
+  .finding-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .severity-tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em;
+  }
+  .tag-critical { background: rgba(248,81,73,0.2); color: var(--red); }
+  .tag-warning  { background: rgba(210,153,34,0.2); color: var(--yellow); }
+  .tag-note     { background: rgba(88,166,255,0.2); color: var(--accent); }
+
+  .finding-type { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .finding-section { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+  .finding-claim { font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
+  .finding-evidence {
+    font-size: 12px; color: #c9d1d9; font-style: italic;
+    border-left: 2px solid var(--border); padding-left: 10px; margin-bottom: 6px;
+  }
+  .finding-rec { font-size: 12px; color: var(--muted); }
+
+  .verified-list h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--green); }
+  .verified-list ul { padding-left: 16px; }
+  .verified-list li { font-size: 13px; color: #c9d1d9; line-height: 1.7; }
+
+  .missing-list h3 { font-size: 13px; font-weight: 600; margin: 16px 0 10px; color: var(--yellow); }
+  .missing-list ul { padding-left: 16px; }
+  .missing-list li { font-size: 13px; color: #c9d1d9; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -310,7 +376,7 @@
 <header>
   <div class="logo">📋</div>
   <h1>PIR Generator</h1>
-  <span>Post-Incident Review · 3-Agent Pipeline</span>
+  <span>Post-Incident Review · 4-Agent Pipeline</span>
 </header>
 
 <div class="layout">
@@ -367,11 +433,19 @@ acked, looking 👀
           <div class="step-desc">Produces PIR doc</div>
         </div>
       </div>
+      <div class="step" id="step-verifier">
+        <div class="step-icon" id="icon-verifier">🔎</div>
+        <div class="step-info">
+          <div class="step-name">Verifier</div>
+          <div class="step-desc">Checks for hallucinations</div>
+        </div>
+      </div>
     </div>
 
     <!-- Tabs -->
     <div class="tabs">
       <div class="tab active" onclick="switchTab('pir')">PIR Document</div>
+      <div class="tab" onclick="switchTab('verification')">Verification</div>
       <div class="tab" onclick="switchTab('extracted')">Extracted Facts</div>
       <div class="tab" onclick="switchTab('analysis')">Analysis JSON</div>
     </div>
@@ -388,6 +462,9 @@ acked, looking 👀
 
       <!-- PIR tab -->
       <div class="pir-content" id="tab-pir"></div>
+
+      <!-- Verification tab -->
+      <div class="verification-content" id="tab-verification"></div>
 
       <!-- Extracted facts tab -->
       <div class="json-content" id="tab-extracted"></div>
@@ -559,7 +636,7 @@ marking incident resolved. thanks everyone 🙏
   updateCharCount();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  let state = { extracted: null, analysis: null, pir: null };
+  let state = { extracted: null, analysis: null, pir: null, verification: null };
   let activeTab = 'pir';
 
   // ── Char counter ──────────────────────────────────────────────────────────
@@ -570,38 +647,39 @@ marking incident resolved. thanks everyone 🙏
   }
 
   // ── Tab switching ─────────────────────────────────────────────────────────
+  const TAB_IDS = ['pir','verification','extracted','analysis'];
   function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll('.tab').forEach((t, i) => {
-      t.classList.toggle('active', ['pir','extracted','analysis'][i] === tab);
+      t.classList.toggle('active', TAB_IDS[i] === tab);
     });
     document.getElementById('tab-pir').classList.toggle('visible', tab === 'pir');
+    document.getElementById('tab-verification').classList.toggle('visible', tab === 'verification');
     document.getElementById('tab-extracted').classList.toggle('visible', tab === 'extracted');
     document.getElementById('tab-analysis').classList.toggle('visible', tab === 'analysis');
 
     const emptyState = document.getElementById('empty-state');
-    if (tab === 'pir' && !state.pir) emptyState.style.display = 'flex';
-    else if (tab === 'extracted' && !state.extracted) emptyState.style.display = 'flex';
-    else if (tab === 'analysis' && !state.analysis) emptyState.style.display = 'flex';
-    else emptyState.style.display = 'none';
+    const stateMap = { pir: state.pir, verification: state.verification, extracted: state.extracted, analysis: state.analysis };
+    emptyState.style.display = stateMap[tab] ? 'none' : 'flex';
   }
 
   // ── Step state helpers ────────────────────────────────────────────────────
+  const STEP_ICONS = { extractor: '🔍', analyst: '🧠', writer: '✍️', verifier: '🔎' };
+
   function setStep(name, status) {
     const el = document.getElementById('step-' + name);
+    if (!el) return;
     el.className = 'step ' + status;
-    const icons = { extractor: '🔍', analyst: '🧠', writer: '✍️' };
-    const doneIcons = { extractor: '✅', analyst: '✅', writer: '✅' };
     document.getElementById('icon-' + name).textContent =
-      status === 'done' ? doneIcons[name] :
-      status === 'running' ? '⏳' : icons[name];
+      status === 'done' ? '✅' : status === 'running' ? '⏳' : STEP_ICONS[name];
   }
 
   function resetSteps() {
-    ['extractor','analyst','writer'].forEach(s => {
-      document.getElementById('step-' + s).className = 'step';
-      const icons = { extractor: '🔍', analyst: '🧠', writer: '✍️' };
-      document.getElementById('icon-' + s).textContent = icons[s];
+    Object.keys(STEP_ICONS).forEach(s => {
+      const el = document.getElementById('step-' + s);
+      if (!el) return;
+      el.className = 'step';
+      document.getElementById('icon-' + s).textContent = STEP_ICONS[s];
     });
   }
 
@@ -611,16 +689,15 @@ marking incident resolved. thanks everyone 🙏
     if (!thread) return;
 
     // Reset UI
-    state = { extracted: null, analysis: null, pir: null };
+    state = { extracted: null, analysis: null, pir: null, verification: null };
     resetSteps();
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('error-banner').classList.remove('visible');
-    document.getElementById('tab-pir').classList.remove('visible');
-    document.getElementById('tab-pir').innerHTML = '';
-    document.getElementById('tab-extracted').classList.remove('visible');
-    document.getElementById('tab-extracted').textContent = '';
-    document.getElementById('tab-analysis').classList.remove('visible');
-    document.getElementById('tab-analysis').textContent = '';
+    ['tab-pir','tab-verification','tab-extracted','tab-analysis'].forEach(id => {
+      const el = document.getElementById(id);
+      el.classList.remove('visible');
+      el.innerHTML = '';
+    });
 
     const btn = document.getElementById('generate-btn');
     btn.disabled = true;
@@ -687,11 +764,15 @@ marking incident resolved. thanks everyone 🙏
         }
         if (data.step === 'writer' && data.data) {
           state.pir = data.data.markdown;
-          document.getElementById('tab-pir').innerHTML =
-            marked.parse(data.data.markdown);
-          // Switch to PIR tab
+          document.getElementById('tab-pir').innerHTML = marked.parse(data.data.markdown);
           switchTab('pir');
           document.getElementById('tab-pir').classList.add('visible');
+        }
+        if (data.step === 'verifier' && data.data) {
+          state.verification = data.data;
+          document.getElementById('tab-verification').innerHTML = renderVerification(data.data);
+          switchTab('verification');
+          document.getElementById('tab-verification').classList.add('visible');
         }
       }
     }
@@ -699,6 +780,45 @@ marking incident resolved. thanks everyone 🙏
     if (name === 'error') {
       showError(data.message);
     }
+  }
+
+  function renderVerification(v) {
+    const confidenceClass = 'confidence-' + (v.overall_confidence || 'medium');
+    const severityOrder = { critical: 0, warning: 1, note: 2 };
+    const findings = (v.findings || []).sort((a,b) =>
+      (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3));
+
+    const findingsHTML = findings.map(f => `
+      <div class="finding ${f.severity}">
+        <div class="finding-header">
+          <span class="severity-tag tag-${f.severity}">${f.severity}</span>
+          <span class="finding-type">${(f.type||'').replace(/_/g,' ')}</span>
+          <span class="finding-section">${f.pir_section || ''}</span>
+        </div>
+        <div class="finding-claim">${escHtml(f.claim || '')}</div>
+        <div class="finding-evidence">${escHtml(f.thread_evidence || '')}</div>
+        <div class="finding-rec">→ ${escHtml(f.recommendation || '')}</div>
+      </div>`).join('');
+
+    const verifiedHTML = (v.verified_facts || []).map(f => `<li>${escHtml(f)}</li>`).join('');
+    const missingHTML = (v.missing_from_pir || []).map(f => `<li>${escHtml(f)}</li>`).join('');
+
+    return `
+      <div class="verify-summary">
+        <div class="confidence-badge ${confidenceClass}">
+          ${v.overall_confidence || 'unknown'} confidence
+        </div>
+        <h3>Summary</h3>
+        <p>${escHtml(v.summary || '')}</p>
+      </div>
+      ${findings.length ? `<div class="findings-list">${findingsHTML}</div>` : '<p style="color:var(--green);margin-bottom:16px">✅ No issues found.</p>'}
+      ${verifiedHTML ? `<div class="verified-list"><h3>✅ Verified Facts</h3><ul>${verifiedHTML}</ul></div>` : ''}
+      ${missingHTML ? `<div class="missing-list"><h3>⚠ Missing From PIR</h3><ul>${missingHTML}</ul></div>` : ''}
+    `;
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   function showError(msg) {
