@@ -1,12 +1,34 @@
 import os
 import json
 import sys
-from flask import Flask, request, Response, send_from_directory
+from flask import Flask, request, Response, send_from_directory, jsonify
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from agents import extractor, analyst, writer, verifier
 
 app = Flask(__name__, static_folder="static")
 CORS(app)  # allow all origins — fine for portfolio demo
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Railway sits behind a proxy — read the real IP from X-Forwarded-For
+def get_real_ip():
+    return request.headers.get("X-Forwarded-For", request.remote_addr).split(",")[0].strip()
+
+limiter = Limiter(
+    key_func=get_real_ip,
+    app=app,
+    default_limits=[],          # no blanket limit — only apply to /generate
+    storage_uri="memory://",    # in-memory; fine for single-replica demo
+)
+
+@app.errorhandler(429)
+def rate_limit_handler(e):
+    return jsonify({
+        "error": "rate_limited",
+        "message": "You've hit the rate limit. Please wait before trying again.",
+        "retry_after": str(e.description)
+    }), 429
 
 # ── Static frontend ──────────────────────────────────────────────────────────
 
@@ -22,6 +44,7 @@ def event(name: str, data) -> str:
     return f"event: {name}\ndata: {payload}\n\n"
 
 @app.route("/generate", methods=["POST"])
+@limiter.limit("10 per hour; 50 per day")
 def generate():
     slack_thread = request.json.get("slack_thread", "").strip()
     if not slack_thread:

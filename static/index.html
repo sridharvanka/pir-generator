@@ -711,6 +711,15 @@ marking incident resolved. thanks everyone 🙏
         body: JSON.stringify({ slack_thread: thread })
       });
 
+      if (response.status === 429) {
+        showError('Rate limit reached — you can run up to 10 PIRs per hour. Please wait a moment and try again.');
+        return;
+      }
+      if (!response.ok) {
+        showError(`Server error (${response.status}). Please try again.`);
+        return;
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
