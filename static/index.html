@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIR Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header .logo {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 13px; color: var(--muted); margin-left: 4px; }
+
+  /* ── Layout ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    height: calc(100vh - 65px);
+  }
+
+  /* ── Left panel ── */
+  .left-panel {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--surface);
+    border: none;
+    color: var(--text);
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 20px 24px;
+    resize: none;
+    outline: none;
+  }
+  textarea::placeholder { color: var(--muted); }
+
+  .left-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  button#generate-btn {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  button#generate-btn:hover { opacity: 0.85; }
+  button#generate-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .char-count { font-size: 12px; color: var(--muted); }
+
+  /* ── Right panel ── */
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Pipeline steps ── */
+  .pipeline {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+  }
+
+  .step {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    transition: background 0.2s;
+    position: relative;
+  }
+  .step:not(:last-child)::after {
+    content: "→";
+    position: absolute;
+    right: -8px;
+    color: var(--border);
+    font-size: 16px;
+    z-index: 1;
+  }
+
+  .step-icon {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    background: var(--surface2);
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+  .step-info { min-width: 0; }
+  .step-name { font-size: 13px; font-weight: 600; }
+  .step-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .step.running .step-icon {
+    border-color: var(--accent);
+    background: rgba(88,166,255,0.1);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .step.running .step-name { color: var(--accent); }
+  .step.done .step-icon {
+    border-color: var(--green);
+    background: rgba(63,185,80,0.1);
+  }
+  .step.done .step-name { color: var(--green); }
+  .step.error .step-icon { border-color: var(--red); }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(88,166,255,0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(88,166,255,0); }
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    gap: 4px;
+  }
+  .tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Output area ── */
+  .output-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+  }
+  .empty-state .icon { font-size: 40px; opacity: 0.3; }
+  .empty-state p { font-size: 14px; }
+
+  /* PIR markdown output */
+  .pir-content {
+    display: none;
+    max-width: 720px;
+  }
+  .pir-content.visible { display: block; }
+  .pir-content h1 { font-size: 22px; margin-bottom: 8px; }
+  .pir-content h2 {
+    font-size: 15px; font-weight: 600; margin: 28px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    color: var(--accent);
+  }
+  .pir-content h3 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; }
+  .pir-content p { font-size: 14px; line-height: 1.7; margin-bottom: 12px; color: #c9d1d9; }
+  .pir-content ul, .pir-content ol { padding-left: 20px; margin-bottom: 12px; }
+  .pir-content li { font-size: 14px; line-height: 1.7; color: #c9d1d9; margin-bottom: 4px; }
+  .pir-content table {
+    width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px;
+  }
+  .pir-content th {
+    text-align: left; padding: 8px 12px; background: var(--surface2);
+    border: 1px solid var(--border); color: var(--muted); font-weight: 600;
+  }
+  .pir-content td {
+    padding: 8px 12px; border: 1px solid var(--border); color: #c9d1d9;
+    vertical-align: top;
+  }
+  .pir-content tr:hover td { background: var(--surface2); }
+  .pir-content hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .pir-content strong { color: var(--text); }
+  .pir-content code {
+    background: var(--surface2); padding: 1px 5px; border-radius: 4px;
+    font-family: monospace; font-size: 12px;
+  }
+
+  /* JSON debug tabs */
+  .json-content {
+    display: none;
+    font-family: "SF Mono", monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: #c9d1d9;
+    background: var(--surface2);
+    padding: 16px;
+    border-radius: 8px;
+  }
+  .json-content.visible { display: block; }
+
+  /* Error */
+  .error-banner {
+    display: none;
+    background: rgba(248,81,73,0.1);
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--red);
+    margin-bottom: 16px;
+  }
+  .error-banner.visible { display: block; }
+
+  /* Badge */
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .badge-new { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📋</div>
+  <h1>PIR Generator</h1>
+  <span>Post-Incident Review · 3-Agent Pipeline</span>
+</header>
+
+<div class="layout">
+
+  <!-- Left: Input -->
+  <div class="left-panel">
+    <div class="panel-header">
+      Slack Incident Thread
+      <span class="badge badge-new">Input</span>
+    </div>
+    <textarea id="slack-input" placeholder="Paste your Slack incident thread here...
+
+Example format:
+#incidents · Monday, June 22, 2026
+
+🤖 datadog-alerts 2:23 PM
+[P1 - FIRING] checkout-service error rate > 5%...
+
+maya.chen 2:25 PM
+acked, looking 👀
+..."></textarea>
+    <div class="left-footer">
+      <button id="generate-btn" onclick="generate()">
+        <span id="btn-icon">▶</span>
+        <span id="btn-label">Generate PIR</span>
+      </button>
+      <span class="char-count" id="char-count">0 characters</span>
+    </div>
+  </div>
+
+  <!-- Right: Pipeline + Output -->
+  <div class="right-panel">
+
+    <!-- Pipeline steps -->
+    <div class="pipeline">
+      <div class="step" id="step-extractor">
+        <div class="step-icon" id="icon-extractor">🔍</div>
+        <div class="step-info">
+          <div class="step-name">Extractor</div>
+          <div class="step-desc">Pulls structured facts</div>
+        </div>
+      </div>
+      <div class="step" id="step-analyst">
+        <div class="step-icon" id="icon-analyst">🧠</div>
+        <div class="step-info">
+          <div class="step-name">Analyst</div>
+          <div class="step-desc">Root cause & reasoning</div>
+        </div>
+      </div>
+      <div class="step" id="step-writer">
+        <div class="step-icon" id="icon-writer">✍️</div>
+        <div class="step-info">
+          <div class="step-name">Writer</div>
+          <div class="step-desc">Produces PIR doc</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('pir')">PIR Document</div>
+      <div class="tab" onclick="switchTab('extracted')">Extracted Facts</div>
+      <div class="tab" onclick="switchTab('analysis')">Analysis JSON</div>
+    </div>
+
+    <!-- Output -->
+    <div class="output-area">
+      <div class="error-banner" id="error-banner"></div>
+
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <div class="icon">📄</div>
+        <p>Paste a Slack thread and click Generate PIR</p>
+      </div>
+
+      <!-- PIR tab -->
+      <div class="pir-content" id="tab-pir"></div>
+
+      <!-- Extracted facts tab -->
+      <div class="json-content" id="tab-extracted"></div>
+
+      <!-- Analysis JSON tab -->
+      <div class="json-content" id="tab-analysis"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Sample thread pre-loaded for demo ──────────────────────────────────────
+  const SAMPLE_THREAD = `#incidents · Monday, June 22, 2026
+
+🤖 datadog-alerts APP 2:23 PM
+[P1 - FIRING] checkout-service error rate > 5% (currently 18.3%)
+Affected: api-gateway → checkout-service → payment-processor
+Threshold: 5% over 3 min | Current: 18.3% | Started: 14:20 UTC
+Runbook: https://wiki.internal/runbooks/checkout-p1
+
+🤖 pagerduty APP 2:23 PM
+[TRIGGERED] P1: checkout-service error rate spike — @maya.chen (on-call)
+
+maya.chen 2:25 PM
+acked, looking 👀
+
+maya.chen 2:26 PM
+error rate is at 21% now. checkout latency p99 is 14s, normally ~400ms. this is bad
+pulling logs now
+
+maya.chen 2:27 PM
+@oncall-sre can someone else jump on? i'm seeing errors across all checkout pods not just one
+
+ravi.subramanian 2:28 PM
+on it, joining zoom
+
+priya.nair 2:28 PM
+i'm here too. is this affecting payments or just the checkout UI?
+
+maya.chen 2:29 PM
+both. seeing payment-processor timeouts in the logs
+ERROR checkout-service: upstream timeout after 10002ms
+  at PaymentProcessorClient.charge (payment-client.js:84)
+  context: { orderId: "ord_9x2kl", userId: "u_48291", retryCount: 2 }
+happening on basically every request
+
+ravi.subramanian 2:30 PM
+k8s pods look healthy, no OOMKills, replica count is normal (24/24 running)
+CPU and memory fine
+
+priya.nair 2:31 PM
+checked payment-processor service directly — it's responding fine in <200ms
+so the timeout is happening before it even gets there?
+
+maya.chen 2:32 PM
+wait yeah you're right. looking at the trace...
+the timeout is on the Redis call, not payment-processor
+checkout-service calls Redis to check cart/session before calling payment
+
+ravi.subramanian 2:33 PM
+Redis looks up in the dashboard, hit rate is normal, memory is fine
+but connection count is way up — sitting at 487, usual is ~60
+
+maya.chen 2:34 PM
+487??? that's the connection pool maxing out
+why would connections be that high
+
+james.okafor 2:35 PM
+hey joining late — did anyone deploy anything in the last 2 hours?
+
+priya.nair 2:35 PM
+good call checking. deployment history...
+
+priya.nair 2:36 PM
+oh.
+14:09 UTC — checkout-service v2.41.3 deployed (canary → full rollout)
+  Author: daniel.wu
+  PR: #18847 "perf: tune Redis connection pool settings"
+
+james.okafor 2:36 PM
+lol
+
+maya.chen 2:37 PM
+@daniel.wu you around?
+
+daniel.wu 2:37 PM
+yeah just saw the page. i'm so sorry. i think i know what happened
+
+daniel.wu 2:38 PM
+i changed REDIS_POOL_MAX_CONNECTIONS from 50 to 5 per pod to reduce Redis load
+but i miscalculated — with 24 pods that's only 120 total connections available and under normal traffic we need way more
+
+ravi.subramanian 2:39 PM
+so all the pods are fighting over 120 connections and queuing up, which causes the 10s timeouts
+
+daniel.wu 2:39 PM
+yes exactly. rollback?
+
+maya.chen 2:39 PM
+yes rollback NOW please
+
+daniel.wu 2:40 PM
+rolling back to v2.41.2
+
+ravi.subramanian 2:42 PM
+pods rolling, 8/24 updated
+
+ravi.subramanian 2:44 PM
+18/24
+
+ravi.subramanian 2:46 PM
+24/24. error rate coming down
+6.2%... 3.1%...
+
+maya.chen 2:47 PM
+0.4% — back to baseline 🎉
+Redis connections back to 58
+
+priya.nair 2:47 PM
+nice. total impact window was ~27 minutes
+
+tom.griffiths [Engineering Manager] 2:48 PM
+good work everyone. what's the blast radius — do we know how many orders failed?
+
+maya.chen 2:49 PM
+pulling from Datadog now... looks like ~3,400 failed checkout attempts
+payment-processor logs show ~1,100 of those made it through on retry, so net ~2,300 hard failures
+
+tom.griffiths 2:50 PM
+ok. @sarah.kim FYI on customer impact, likely need to reach out to affected users
+
+sarah.kim [PM] 2:51 PM
+already on it, drafting comms now. were any payments double-charged?
+
+daniel.wu 2:52 PM
+no — payment-processor is idempotent on orderId so retries wouldn't have double-charged
+
+sarah.kim 2:52 PM
+ok good, that simplifies things
+
+ravi.subramanian 2:53 PM
+one thing to flag — our canary process should have caught this.
+we rolled from 5% → 100% in about 8 minutes. the error rate didn't spike until ~80% rollout so canary passed
+
+maya.chen 2:54 PM
+yeah the canary traffic was low enough that connection pool contention wasn't visible at 5%
+we need a longer canary bake time or load-aware canary checks
+
+daniel.wu 2:55 PM
+also on me — i should have load tested this config change before shipping
+changed a pool size without doing the math on cluster-wide impact
+
+tom.griffiths 2:56 PM
+let's save the how-do-we-prevent-this for the PIR. good job on the fast resolution.
+@maya.chen can you own the PIR doc? due EOD Wednesday
+
+maya.chen 2:57 PM
+on it
+
+maya.chen 2:57 PM
+marking incident resolved. thanks everyone 🙏
+
+🤖 pagerduty APP 2:57 PM
+[RESOLVED] P1: checkout-service error rate spike — Duration: 34 min`;
+
+  // Pre-load sample
+  document.getElementById('slack-input').value = SAMPLE_THREAD;
+  updateCharCount();
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let state = { extracted: null, analysis: null, pir: null };
+  let activeTab = 'pir';
+
+  // ── Char counter ──────────────────────────────────────────────────────────
+  document.getElementById('slack-input').addEventListener('input', updateCharCount);
+  function updateCharCount() {
+    const n = document.getElementById('slack-input').value.length;
+    document.getElementById('char-count').textContent = n.toLocaleString() + ' characters';
+  }
+
+  // ── Tab switching ─────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', ['pir','extracted','analysis'][i] === tab);
+    });
+    document.getElementById('tab-pir').classList.toggle('visible', tab === 'pir');
+    document.getElementById('tab-extracted').classList.toggle('visible', tab === 'extracted');
+    document.getElementById('tab-analysis').classList.toggle('visible', tab === 'analysis');
+
+    const emptyState = document.getElementById('empty-state');
+    if (tab === 'pir' && !state.pir) emptyState.style.display = 'flex';
+    else if (tab === 'extracted' && !state.extracted) emptyState.style.display = 'flex';
+    else if (tab === 'analysis' && !state.analysis) emptyState.style.display = 'flex';
+    else emptyState.style.display = 'none';
+  }
+
+  // ── Step state helpers ────────────────────────────────────────────────────
+  function setStep(name, status) {
+    const el = document.getElementById('step-' + name);
+    el.className = 'step ' + status;
+    const icons = { extractor: '🔍', analyst: '🧠', writer: '✍️' };
+    const doneIcons = { extractor: '✅', analyst: '✅', writer: '✅' };
+    document.getElementById('icon-' + name).textContent =
+      status === 'done' ? doneIcons[name] :
+      status === 'running' ? '⏳' : icons[name];
+  }
+
+  function resetSteps() {
+    ['extractor','analyst','writer'].forEach(s => {
+      document.getElementById('step-' + s).className = 'step';
+      const icons = { extractor: '🔍', analyst: '🧠', writer: '✍️' };
+      document.getElementById('icon-' + s).textContent = icons[s];
+    });
+  }
+
+  // ── Generate ──────────────────────────────────────────────────────────────
+  async function generate() {
+    const thread = document.getElementById('slack-input').value.trim();
+    if (!thread) return;
+
+    // Reset UI
+    state = { extracted: null, analysis: null, pir: null };
+    resetSteps();
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('error-banner').classList.remove('visible');
+    document.getElementById('tab-pir').classList.remove('visible');
+    document.getElementById('tab-pir').innerHTML = '';
+    document.getElementById('tab-extracted').classList.remove('visible');
+    document.getElementById('tab-extracted').textContent = '';
+    document.getElementById('tab-analysis').classList.remove('visible');
+    document.getElementById('tab-analysis').textContent = '';
+
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+    document.getElementById('btn-icon').textContent = '⏳';
+    document.getElementById('btn-label').textContent = 'Generating...';
+
+    try {
+      const response = await fetch('/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slack_thread: thread })
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        const events = buffer.split('\n\n');
+        buffer = events.pop(); // keep incomplete event
+
+        for (const block of events) {
+          if (!block.trim()) continue;
+          const lines = block.split('\n');
+          let eventName = '', dataStr = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventName = line.slice(7);
+            if (line.startsWith('data: ')) dataStr = line.slice(6);
+          }
+          if (!eventName || !dataStr) continue;
+
+          const data = JSON.parse(dataStr);
+          handleEvent(eventName, data);
+        }
+      }
+    } catch(e) {
+      showError('Connection error: ' + e.message);
+    }
+
+    btn.disabled = false;
+    document.getElementById('btn-icon').textContent = '▶';
+    document.getElementById('btn-label').textContent = 'Generate PIR';
+  }
+
+  function handleEvent(name, data) {
+    if (name === 'step') {
+      setStep(data.step, data.status);
+
+      if (data.status === 'done') {
+        if (data.step === 'extractor' && data.data) {
+          state.extracted = data.data;
+          document.getElementById('tab-extracted').textContent =
+            JSON.stringify(data.data, null, 2);
+        }
+        if (data.step === 'analyst' && data.data) {
+          state.analysis = data.data;
+          document.getElementById('tab-analysis').textContent =
+            JSON.stringify(data.data, null, 2);
+        }
+        if (data.step === 'writer' && data.data) {
+          state.pir = data.data.markdown;
+          document.getElementById('tab-pir').innerHTML =
+            marked.parse(data.data.markdown);
+          // Switch to PIR tab
+          switchTab('pir');
+          document.getElementById('tab-pir').classList.add('visible');
+        }
+      }
+    }
+
+    if (name === 'error') {
+      showError(data.message);
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-banner');
+    el.textContent = '⚠ ' + msg;
+    el.classList.add('visible');
+    document.getElementById('empty-state').style.display = 'none';
+  }
+</script>
+</body>
+</html>
